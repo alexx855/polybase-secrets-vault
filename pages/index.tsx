@@ -2,24 +2,42 @@ import Head from 'next/head'
 import { Inter } from 'next/font/google'
 import { v4 as uuidv4 } from 'uuid';
 import { useState } from 'react'
-import { urlsCollectionRef } from '@/lib/polybase'
+import { generateSecretKey, symmmetricEncryptString, urlsCollectionRef } from '@/lib/polybase'
+import { encodeToString } from '@polybase/util';
 
 const inter = Inter({ subsets: ['latin'] })
 
 export default function Home() {
-  const [id, setId] = useState<string | null>(null)
+  const [data, setData] = useState<{ key: string, uid: string } | null>(null)
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: any) => {
     e.preventDefault()
     // get the url from the form
     const url = e.target.url.value
+    if (!url || url === '') {
+      return alert('Please enter a valid url')
+    }
+
     setLoading(true)
     try {
       const uuid = uuidv4()
-      const recordData = await urlsCollectionRef.create([uuid, url]);
-      if (recordData.data.id) {
-        setId(recordData.data.id)
+      // symmmetric encrypt the original url so it can be stored in the public database
+      const key = generateSecretKey()
+      const encryptedURL = await symmmetricEncryptString(key, url)
+      console.log(encryptedURL)
+      if (encryptedURL) {
+        // create a record in the database
+        await urlsCollectionRef.create([
+          uuid,
+          encodeToString(encryptedURL.nonce, 'base64'),
+          encodeToString(encryptedURL.ciphertext, 'base64'),
+        ])
+
+        setData({
+          key: encodeToString(key, 'hex'),
+          uid: uuid
+        })
         // clear the input
         e.target.url.value = ''
       } else {
@@ -41,7 +59,7 @@ export default function Home() {
       </Head>
       <main className={`${inter.className} bg-white dark:bg-gray-800 flex items-center justify-center h-screen w-screen overflow-hidden`}>
         <form onSubmit={handleSubmit}
-          className="w-full max-w-lg">
+          className="w-full max-w-lg p-4">
           <h1
             className='text-center text-2xl font-bold text-gray-900 dark:text-white mb-4'
           >
@@ -51,7 +69,7 @@ export default function Home() {
 
           <div className="relative">
             <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-              <svg aria-hidden="true" className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              <svg aria-hidden="true" className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </div>
             <input disabled={loading} type="url" name="url" id="default-url" className="block w-full p-4 pl-10 text-sm text-gray-900 border border-gray-300 rounded-lg bg-gray-50 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="http://google.com/" required />
             <button disabled={loading} type="submit" className="text-white absolute right-2.5 bottom-2.5 bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-4 py-2 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
@@ -59,20 +77,18 @@ export default function Home() {
             </button>
           </div>
 
-          {id && !loading && (<div
+          {data && !loading && (<div
             className="group cursor-pointer flex p-4 mt-4 text-sm text-blue-800 border border-blue-300 rounded-lg bg-blue-50 dark:bg-gray-800 dark:text-blue-400 dark:border-blue-800"
             role="alert"
             onClick={() => {
               // copy to clipboard
-              navigator.clipboard.writeText(`${process.env.NEXT_PUBLIC_URL}/link/${id}`)
+              navigator.clipboard.writeText(`${process.env.NEXT_PUBLIC_URL}/link/${data.uid}?key=${data.key}`)
               alert('Copied to clipboard')
             }}
           >
-            <svg aria-hidden="true" className="flex-shrink-0 inline w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"></path></svg>
-            <span className="sr-only">Info</span>
-            <div>
+            <div className="w-full">
               <span className="font-medium">URL can be accessed here:</span>
-              <p className='group-hover:underline'>{`${process.env.NEXT_PUBLIC_URL}/link/${id}`}</p>
+              <p className='group-hover:underline text-ellipsis overflow-hidden'>{`${process.env.NEXT_PUBLIC_URL}/link/${data.uid}?key=${data.key}`}</p>
             </div>
           </div>
           )}
