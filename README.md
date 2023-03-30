@@ -1,5 +1,1 @@
-## TODO
-- [ ] change url vault.alexpedersen.dev
-- [ ] feat: allow decrypt from app route without key
-- [ ] feat: auth
-- [ ] feat: my-vault user based
+This project demonstrates how to use polybase and nextjs to encrypt and decrypt URLs symmetrically using a layer 2 blockchain solution called zero knowledge rollups, which allows for off-chain computations and storage with minimal trust.
